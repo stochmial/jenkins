@@ -25,12 +25,11 @@ package hudson.tasks;
 
 import hudson.FilePath;
 import hudson.Functions;
+import hudson.Proc;
 import hudson.Util;
 import hudson.Extension;
-import hudson.Proc;
 import hudson.model.AbstractProject;
 import hudson.model.Result;
-import hudson.remoting.Callable;
 import hudson.remoting.VirtualChannel;
 import hudson.util.FormValidation;
 import java.io.IOException;
@@ -55,6 +54,7 @@ import java.util.logging.Logger;
  * @author Kohsuke Kawaguchi
  */
 public class Shell extends CommandInterpreter {
+
     @DataBoundConstructor
     public Shell(String command, Integer unstableReturn) {
         super(LineEndingConversion.convertEOL(command, LineEndingConversion.EOLType.Unix));
@@ -69,12 +69,14 @@ public class Shell extends CommandInterpreter {
 
     private final Integer unstableReturn;
 
+
+
     /**
      * Older versions of bash have a bug where non-ASCII on the first line
      * makes the shell think the file is a binary file and not a script. Adding
      * a leading line feed works around this problem.
      */
-    private static String addCrForNonASCII(String s) {
+    private static String addLineFeedForNonASCII(String s) {
         if(!s.startsWith("#!")) {
             if (s.indexOf('\n')!=0) {
                 return "\n" + s;
@@ -99,7 +101,7 @@ public class Shell extends CommandInterpreter {
     }
 
     protected String getContents() {
-        return addCrForNonASCII(fixCrLf(command));
+        return addLineFeedForNonASCII(LineEndingConversion.convertEOL(command,LineEndingConversion.EOLType.Unix));
     }
 
     protected String getFileExtension() {
