@@ -29,9 +29,8 @@ THE SOFTWARE.
     <f:textarea name="command" value="${instance.command}" class="fixed-width" />
   </f:entry>
   <f:advanced>
-    <f:entry title="errorlevel to set build unstable"
-             description="${%unstableReturn_description(rootURL)}">
-      <f:number clazz="positive-number" name="unstableReturn" value="${instance.unstableReturn}" min="1" max="255" step="1" />
+    <f:entry title="${%Errorlevel to set build unstable}" field="unstableReturn" >
+      <f:number name="unstableReturn" value="${instance.unstableReturn}" min="-2147483648" max="2147483647" step="1" />
     </f:entry>
   </f:advanced>
 </j:jelly>

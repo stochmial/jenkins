@@ -25,11 +25,9 @@ package hudson.tasks;
 
 import hudson.FilePath;
 import hudson.Functions;
-import hudson.Proc;
 import hudson.Util;
 import hudson.Extension;
 import hudson.model.AbstractProject;
-import hudson.model.Result;
 import hudson.remoting.VirtualChannel;
 import hudson.util.FormValidation;
 import java.io.IOException;
@@ -39,6 +37,7 @@ import jenkins.security.MasterToSlaveCallable;
 import net.sf.json.JSONObject;
 import org.jenkinsci.Symbol;
 import org.kohsuke.stapler.DataBoundConstructor;
+import org.kohsuke.stapler.DataBoundSetter;
 import org.kohsuke.stapler.StaplerRequest;
 import org.kohsuke.stapler.QueryParameter;
 
@@ -56,18 +55,11 @@ import java.util.logging.Logger;
 public class Shell extends CommandInterpreter {
 
     @DataBoundConstructor
-    public Shell(String command, Integer unstableReturn) {
-        super(LineEndingConversion.convertEOL(command, LineEndingConversion.EOLType.Unix));
-        if (unstableReturn != null && unstableReturn.equals(0))
-            unstableReturn = null;
-        this.unstableReturn = unstableReturn;
-    }
-
     public Shell(String command) {
-        this(command, null);
+        super(LineEndingConversion.convertEOL(command, LineEndingConversion.EOLType.Unix));
     }
 
-    private final Integer unstableReturn;
+    private Integer unstableReturn;
 
 
 
@@ -112,18 +104,14 @@ public class Shell extends CommandInterpreter {
         return unstableReturn;
     }
 
-    /**
-      * Allow the user to define a result for "unstable":
-      */
+    @DataBoundSetter
+    public void setUnstableReturn(Integer unstableReturn) {
+        this.unstableReturn = unstableReturn;
+    }
+
     @Override
-    protected int join(Proc p) throws IOException, InterruptedException {
-        final int result = p.join();
-        if (this.unstableReturn != null && result != 0 && this.unstableReturn.equals(result)) {
-            getBuild().setResult(Result.UNSTABLE);
-            return 0;
-        }
-        else
-            return result;
+    protected boolean isExitCodeForUnstableBuild(int exitCode) {
+        return this.unstableReturn != null && exitCode != 0 && this.unstableReturn.equals(exitCode);
     }
 
     @Override
@@ -194,14 +182,28 @@ public class Shell extends CommandInterpreter {
         }
 
         @Override
-        public Builder newInstance(StaplerRequest req, JSONObject data) {
-            final String unstableReturnStr = data.getString("unstableReturn");
-            Integer unstableReturn = null;
-            if (unstableReturnStr != null && ! unstableReturnStr.isEmpty()) {
-                /* Already validated by f.number in the form */
-                unstableReturn = (Integer)Integer.parseInt(unstableReturnStr, 10);
+        public Builder newInstance(StaplerRequest req, JSONObject formData) {
+            return req.bindJSON(Shell.class,formData);
+        }
+
+        /**
+         * Performs on-the-fly validation of the exit code.
+         */
+        public FormValidation doCheckUnstableReturn(@QueryParameter String value) {
+            value = Util.fixEmptyAndTrim(value);
+            if (value == null) {
+                return FormValidation.ok();
             }
-            return new Shell(data.getString("command"), unstableReturn);
+            long unstableReturn;
+            try {
+                unstableReturn = Long.parseLong(value);
+            } catch (NumberFormatException e) {
+                return FormValidation.error(hudson.model.Messages.Hudson_NotANumber());
+            }
+            if (unstableReturn < 0 || unstableReturn > 255) {
+                return FormValidation.error(hudson.tasks.Messages.Shell_invalid_exit_code_range(unstableReturn));
+            }
+            return FormValidation.ok();
         }
 
         @Override

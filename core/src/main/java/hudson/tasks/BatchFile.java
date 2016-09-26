@@ -25,12 +25,17 @@ package hudson.tasks;
 
 import hudson.FilePath;
 import hudson.Extension;
+import hudson.Util;
 import hudson.model.AbstractProject;
+import hudson.util.FormValidation;
 import hudson.util.LineEndingConversion;
 import net.sf.json.JSONObject;
 import org.jenkinsci.Symbol;
 import org.kohsuke.stapler.DataBoundConstructor;
+import org.kohsuke.stapler.DataBoundSetter;
+import org.kohsuke.stapler.QueryParameter;
 import org.kohsuke.stapler.StaplerRequest;
+
 import java.io.ObjectStreamException;
 
 /**
@@ -40,16 +45,11 @@ import java.io.ObjectStreamException;
  */
 public class BatchFile extends CommandInterpreter {
     @DataBoundConstructor
-    public BatchFile(String command, Integer unstableReturn) {
-        super(LineEndingConversion.convertEOL(command, LineEndingConversion.EOLType.Windows));
-        this.unstableReturn = unstableReturn;
-    }
-
     public BatchFile(String command) {
-        this(command, null);
+        super(LineEndingConversion.convertEOL(command, LineEndingConversion.EOLType.Windows));
     }
 
-    private final Integer unstableReturn;
+    private Integer unstableReturn;
 
     public String[] buildCommandLine(FilePath script) {
         return new String[] {"cmd","/c","call",script.getRemote()};
@@ -65,6 +65,16 @@ public class BatchFile extends CommandInterpreter {
 
     public final Integer getUnstableReturn() {
         return unstableReturn;
+    }
+
+    @DataBoundSetter
+    public void setUnstableReturn(Integer unstableReturn) {
+        this.unstableReturn = unstableReturn;
+    }
+
+    @Override
+    protected boolean isExitCodeForUnstableBuild(int exitCode) {
+        return this.unstableReturn != null && exitCode != 0 && this.unstableReturn.equals(exitCode);
     }
 
     private Object readResolve() throws ObjectStreamException {
@@ -83,14 +93,28 @@ public class BatchFile extends CommandInterpreter {
         }
 
         @Override
-        public Builder newInstance(StaplerRequest req, JSONObject data) {
-            final String unstableReturnStr = data.getString("unstableReturn");
-            Integer unstableReturn = null;
-            if (unstableReturnStr != null && ! unstableReturnStr.isEmpty()) {
-                /* Already validated by f.number in the form */
-                unstableReturn = (Integer)Integer.parseInt(unstableReturnStr, 10);
+        public Builder newInstance(StaplerRequest req, JSONObject formData) {
+            return req.bindJSON(BatchFile.class,formData);
+        }
+
+        /**
+         * Performs on-the-fly validation of the exit code.
+         */
+        public FormValidation doCheckUnstableReturn(@QueryParameter String value) {
+            value = Util.fixEmptyAndTrim(value);
+            if (value == null) {
+                return FormValidation.ok();
             }
-            return new BatchFile(data.getString("command"), unstableReturn);
+            long unstableReturn;
+            try {
+                unstableReturn = Long.parseLong(value);
+            } catch (NumberFormatException e) {
+                return FormValidation.error(hudson.model.Messages.Hudson_NotANumber());
+            }
+            if (unstableReturn < Integer.MIN_VALUE || unstableReturn > Integer.MAX_VALUE) {
+                return FormValidation.error(hudson.tasks.Messages.BatchFile_invalid_exit_code_range(unstableReturn));
+            }
+            return FormValidation.ok();
         }
 
         public boolean isApplicable(Class<? extends AbstractProject> jobType) {

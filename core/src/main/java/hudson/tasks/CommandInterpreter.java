@@ -53,11 +53,6 @@ public abstract class CommandInterpreter extends Builder {
      */
     protected final String command;
 
-    /**
-     * The build being run. Valid only during perform(...).
-     */
-    protected AbstractBuild<?,?> build;
-
     public CommandInterpreter(String command) {
         this.command = command;
     }
@@ -66,26 +61,19 @@ public abstract class CommandInterpreter extends Builder {
         return command;
     }
 
-    /**
-      * Access the current build object.
-      *
-      * Useful for {@link #join(Proc p)} for setting build results.
-      *
-     * @return The build being run, or null if outside perform(...)
-     * @since 1.573
-     */
-    protected final AbstractBuild<?,?> getBuild()
-    {
-        return build;
-    }
-
     @Override
     public boolean perform(AbstractBuild<?,?> build, Launcher launcher, BuildListener listener) throws InterruptedException {
         return perform(build,launcher,(TaskListener)listener);
     }
 
+    /**
+     * Allow the user to define a result for "unstable".
+     */
+    protected boolean isExitCodeForUnstableBuild(int exitCode) {
+        return false;
+    }
+
     public boolean perform(AbstractBuild<?,?> build, Launcher launcher, TaskListener listener) throws InterruptedException {
-        this.build = build;
         FilePath ws = build.getWorkspace();
         if (ws == null) {
             Node node = build.getBuiltOn();
@@ -114,11 +102,15 @@ public abstract class CommandInterpreter extends Builder {
                     envVars.put(e.getKey(),e.getValue());
 
                 r = join(launcher.launch().cmds(buildCommandLine(script)).envs(envVars).stdout(listener).pwd(ws).start());
+
+                if(isExitCodeForUnstableBuild(r)) {
+                    build.setResult(Result.UNSTABLE);
+                    r = 0;
+                }
             } catch (IOException e) {
                 Util.displayIOException(e, listener);
                 e.printStackTrace(listener.fatalError(Messages.CommandInterpreter_CommandFailed()));
             }
-            this.build = null;
             return r==0;
         } finally {
             try {
